@@ -39,11 +39,18 @@ ip_empty_stack_dtor(struct ip_empty_stack *stack)
 }
 
 
+size_t
+ip_empty_stack_size(struct ip_empty_stack * stack)
+{
+  return stack->sp;
+}
+
+
 int
-ip_empty_stack_push(struct ip_empty_stack * stack, ip_value_t i)
+ip_empty_stack_push(struct ip_empty_stack * stack, ip_value_t v)
 {
   if (stack->sp < stack->size) {
-    stack->data[stack->sp++] = i;
+    stack->data[stack->sp++] = v;
     return 0;
   } else {
     return 1;
@@ -51,76 +58,70 @@ ip_empty_stack_push(struct ip_empty_stack * stack, ip_value_t i)
 }
 
 int
-ip_empty_stack_pop(struct ip_empty_stack * stack, ip_value_t * i)
+ip_empty_stack_pop(struct ip_empty_stack * stack, ip_value_t * v)
 {
   if (0 < stack->sp) {
-    *i = stack->data[--stack->sp];
+    *v = stack->data[--stack->sp];
     return 0;
   } else {
     return 1;
   }
 }
 
-int
-ip_empty_stack_peek(struct ip_empty_stack * stack, ip_value_t * i)
-{
-  if (0 < stack->sp) {
-    *i = stack->data[stack->sp - 1];
-    return 0;
-  } else {
-    return 1;
-  }
-}
+
+#define ip_empty_stack_ref(stack, i)   ((stack)->data[i])
 
 
 struct ip_proc {
+  size_t nargs;
   size_t nlocals;
-  ip_value_t *locals;
   size_t ninsts;
   struct ip_inst *insts;
 };
 
 
 int
-ip_proc_init(struct ip_proc *proc, size_t nlocals, ip_value_t *locals, size_t ninsts, struct ip_inst *insts)
+ip_proc_init(struct ip_proc *proc, size_t nargs, size_t nlocals, size_t ninsts, struct ip_inst *insts)
 {
-  proc->locals = malloc(nlocals * sizeof(ip_value_t));
-  if (NULL == proc->locals) {
-    return 1;
-  }
-
   proc->insts = malloc(ninsts * sizeof(struct ip_inst));
   if (NULL == proc->insts) {
     return 1;
   }
 
+  proc->nargs = nargs;
   proc->nlocals = nlocals;
   proc->ninsts = ninsts;
-  memcpy(proc->locals, locals, nlocals * sizeof(ip_value_t));
   memcpy(proc->insts,   insts, ninsts  * sizeof(struct ip_inst));
 
   return 0;
 }
 
 int
-ip_proc_new(size_t nlocals, ip_value_t *locals, size_t ninsts, struct ip_inst *insts, struct ip_proc **ret)
+ip_proc_new(size_t nargs, size_t nlocals, size_t ninsts, struct ip_inst *insts, struct ip_proc **ret)
 {
   *ret = malloc(sizeof(struct ip_proc));
   if(NULL == *ret) {
     return 1;
   }
 
-  return ip_proc_init(*ret, nlocals, locals, ninsts, insts);
+  return ip_proc_init(*ret, nargs, nlocals, ninsts, insts);
 }
 
 void
 ip_proc_dtor(struct ip_proc *proc)
 {
-  free(proc->locals);
   free(proc->insts);
 }
 
 
+/**
+ * stack usage
+ *               previous sp        fp             sp
+ *                     v            v              v
+ *        --+----------+------------+--------------
+ * bottom <-| args ... | locals ... | data | data | -> top
+ *        --+----------+------------+--------------
+ */
 struct ip_vm {
   struct ip_empty_stack stack;
 };
@@ -147,10 +148,20 @@ ip_vm_new(struct ip_vm **vm)
 int
 ip_vm_exec(struct ip_vm *vm, struct ip_proc *proc)
 {
-  int ip = 0;
+  size_t ip = 0;
+  size_t fp;
 
+  for (size_t i = 0; i < proc->nlocals; i++) {
+    if (ip_empty_stack_push(&vm->stack, IP_INT2VALUE(0))) {
+      return 1;
+    }
+  }
+  fp = ip_empty_stack_size(&vm->stack);
+
+
+#define LOCAL(i)  ip_empty_stack_ref(&vm->stack, fp - (proc->nargs + proc->nlocals) + i)
 #define POP(ref)  do{if (ip_empty_stack_pop(&vm->stack, ref)) { return 1;}} while(0)
-#define PUSH(v)  do{if (ip_empty_stack_push(&vm->stack, v)) { return 1;}} while(0)
+#define PUSH(v)   do{if (ip_empty_stack_push(&vm->stack, v)) { return 1;}} while(0)
 
 
   while (1) {
@@ -165,7 +176,7 @@ ip_vm_exec(struct ip_vm *vm, struct ip_proc *proc)
       ip_value_t v;
 
       i = inst.u.i;
-      v = proc->locals[i];
+      v = LOCAL(i);
 
       PUSH(v);
       break;
@@ -177,7 +188,7 @@ ip_vm_exec(struct ip_vm *vm, struct ip_proc *proc)
       i = inst.u.i;
       POP(&v);
 
-      proc->locals[i] = v;
+      LOCAL(i) = v;
 
       break;
     }
@@ -236,6 +247,16 @@ ip_vm_exec(struct ip_vm *vm, struct ip_proc *proc)
       break;
     }
     case IP_CODE_RETURN: {
+      ip_value_t v;
+      ip_value_t ignore;
+      POP(&v);
+
+      for (size_t i = 0; i < proc->nlocals + proc->nargs; i++) {
+        POP(&ignore);
+      }
+
+      PUSH(v);
+
       return 0;
     }
     default: {
@@ -251,6 +272,12 @@ ip_vm_exec(struct ip_vm *vm, struct ip_proc *proc)
 }
 
 int
+ip_vm_push_arg(struct ip_vm *vm, ip_value_t arg)
+{
+  return ip_empty_stack_push(&vm->stack, arg);
+}
+
+int
 ip_vm_get_result(struct ip_vm *vm, ip_value_t * result)
 {
   return ip_empty_stack_pop(&vm->stack, result);
@@ -262,7 +289,8 @@ ip_proc_new_sum(struct ip_proc **proc)
   /* 0(arg)   - n */
   /* 1(local) - i */
   /* 2(local) - sum */
-  ip_value_t locals[3];
+  size_t nargs = 1;
+  size_t nlocals = 2;
   #define n 0
   #define i 1
   #define sum 2
@@ -294,7 +322,7 @@ ip_proc_new_sum(struct ip_proc **proc)
   #undef i
   #undef sum
 
-  return ip_proc_new(3, locals, 19, body, proc);
+  return ip_proc_new(nargs, nlocals, 19, body, proc);
 
 }
 
@@ -312,10 +340,14 @@ main()
     puts("initialization failed");
     return 1;
   }
-  proc->locals[0] = 10;
 
   ret = ip_vm_new(&vm);
   if (ret) {
+    puts("initialization failed");
+    return 1;
+  }
+
+  if (ip_vm_push_arg(vm, IP_INT2VALUE(10))) {
     puts("initialization failed");
     return 1;
   }
