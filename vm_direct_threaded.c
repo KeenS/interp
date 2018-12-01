@@ -48,7 +48,7 @@ ip_proc_init(struct ip_proc *proc, size_t nargs, size_t nlocals, size_t ninsts, 
 {
   union ip_vm_arg arg;
 
-  proc->insts = malloc(ninsts * sizeof(struct ip_inst));
+  proc->insts = malloc(ninsts * sizeof(struct ip_inst_internal));
   if (NULL == proc->insts) {
     return 1;
   }
@@ -60,9 +60,8 @@ ip_proc_init(struct ip_proc *proc, size_t nargs, size_t nlocals, size_t ninsts, 
   arg.compile.ninsts = ninsts;
   arg.compile.insts = insts;
   arg.compile.result = proc->insts;
-  ip_vm_main(IP_VM_COMPILE, arg);
 
-  return 0;
+  return ip_vm_main(IP_VM_COMPILE, arg);
 }
 
 int
