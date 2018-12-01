@@ -6,13 +6,13 @@ default: all
 
 .PHONY: simple threaded run default test clean
 
-all: main_simple main_threaded
+all: simple threaded
 
 simple: main_simple
-	./main_simple
+	time ./main_simple
 
 threaded: main_threaded
-	./main_threaded
+	time ./main_threaded
 
 run: main_simple
 	./main_simple
