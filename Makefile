@@ -1,4 +1,4 @@
-CFLAGS = -std=c89 -ggdb -O3
+CFLAGS = -std=c89 -ggdb -O3 -Wall -Wextra
 LDFLAGS =
 OBJS =
 
