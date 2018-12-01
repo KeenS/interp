@@ -274,6 +274,28 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
 
       break;
     }
+    case IP_CODE_CALL_INDIRECT: {
+      int ret;
+      ip_value_t p;
+      ip_callinfo_t ci = {.ip = ip, .fp = fp, .proc = proc};
+
+      POP(&p);
+
+      ret = ip_stack_push(ip_callinfo_t, &vm->callstack, ci);
+      if (ret) {
+        return 1;
+      }
+
+      proc = vm->procs[IP_VALUE2PROCREF(p)];
+
+      PUSHN(proc->nlocals, IP_INT2VALUE(0));
+
+      ip = -1;
+      fp = ip_stack_size(ip_value_t, &vm->stack);
+
+
+      break;
+    }
     case IP_CODE_RETURN: {
       int ret;
       ip_value_t v;

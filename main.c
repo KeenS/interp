@@ -44,7 +44,7 @@ ip_register_sum(struct ip_vm *vm)
   int ret;
   struct ip_proc *proc;
 
-  ret = ip_proc_new(nargs, nlocals, 19, body, &proc);
+  ret = ip_proc_new(nargs, nlocals, sizeof(body)/sizeof(body[0]), body, &proc);
   if (ret) {
     return -1;
   }
@@ -99,7 +99,7 @@ ip_register_fib(struct ip_vm *vm)
   int ret;
   struct ip_proc *proc;
 
-  ret = ip_proc_new(nargs, nlocals, 16, body, &proc);
+  ret = ip_proc_new(nargs, nlocals, sizeof(body)/sizeof(body[0]), body, &proc);
   if (ret) {
     return -1;
   }
@@ -111,23 +111,26 @@ ip_register_fib(struct ip_vm *vm)
 }
 
 ip_proc_ref_t
-ip_register_entry(struct ip_vm *vm, ip_proc_ref_t callee)
+ip_register_entry(struct ip_vm *vm)
 {
-  size_t nargs = 1;
+  size_t nargs = 2;
   size_t nlocals = 0;
   #define n 0
+  #define callee 1
   struct ip_inst body[] = {
                            /*  0 */ IP_INST_GET_LOCAL(n),
-                           /*  1 */ IP_INST_CALL(callee),
-                           /*  2 */ IP_INST_EXIT(),
+                           /*  1 */ IP_INST_GET_LOCAL(callee),
+                           /*  2 */ IP_INST_CALL_INDIRECT(),
+                           /*  3 */ IP_INST_EXIT(),
   };
 
   #undef n
+  #undef callee
 
   int ret;
   struct ip_proc *proc;
 
-  ret = ip_proc_new(nargs, nlocals, 3, body, &proc);
+  ret = ip_proc_new(nargs, nlocals, sizeof(body)/sizeof(body[0]), body, &proc);
   if (ret) {
     return -1;
   }
@@ -163,14 +166,19 @@ main()
     return 1;
   }
 
-  entry = ip_register_entry(vm, fib);
+  entry = ip_register_entry(vm);
   if (entry < 0) {
     puts("proc registration failed: main");
     return 1;
   }
 
 
-  if (ip_vm_push_arg(vm, IP_INT2VALUE(39))) {
+  if (ip_vm_push_arg(vm, IP_INT2VALUE(30))) {
+    puts("initialization failed");
+    return 1;
+  }
+
+  if (ip_vm_push_arg(vm, IP_PROCREF2VALUE(fib))) {
     puts("initialization failed");
     return 1;
   }
