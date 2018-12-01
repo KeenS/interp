@@ -1,3 +1,4 @@
 *.o
 main_simple
 main_threaded
+main_direct_threaded
