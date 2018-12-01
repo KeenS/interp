@@ -3,73 +3,84 @@
 #include <string.h>
 #include <stdio.h>
 
-struct ip_empty_stack {
-  size_t size;
-  size_t sp;
-  ip_value_t *data;
-};
+/* pseudo generics. */
+/* the stack is empty stack */
+#define def_ip_stack(ty)                                                \
+  typedef struct ip_stack_##ty {                                        \
+    size_t size;                                                        \
+    size_t sp;                                                          \
+    ty *data;                                                           \
+  } ip_stack_##ty##_t;                                                  \
+    int                                                                 \
+    ip_stack_init_##ty(struct ip_stack_##ty *stack, size_t size)        \
+    {                                                                   \
+      stack->data = malloc(size * sizeof(ty));                          \
+      if (NULL == stack->data) {                                        \
+        return 1;                                                       \
+      }                                                                 \
+      stack->size = size;                                               \
+      stack->sp = 0;                                                    \
+      return 0;                                                         \
+    }                                                                   \
+                                                                        \
+    int                                                                 \
+    ip_stack_new_##ty(size_t size, struct ip_stack_##ty **ret)          \
+    {                                                                   \
+      *ret = malloc(sizeof(struct ip_stack_##ty));                      \
+      if(NULL == *ret) {                                                \
+        return 1;                                                       \
+      }                                                                 \
+                                                                        \
+      return ip_stack_init_##ty(*ret, size);                            \
+    }                                                                   \
+                                                                        \
+    void                                                                \
+    ip_stack_dtor_##ty(struct ip_stack_##ty *stack)                     \
+    {                                                                   \
+      free(stack->data);                                                \
+    }                                                                   \
+                                                                        \
+                                                                        \
+    size_t                                                              \
+    ip_stack_size_##ty(struct ip_stack_##ty * stack)                    \
+    {                                                                   \
+      return stack->sp;                                                 \
+    }                                                                   \
+                                                                        \
+                                                                        \
+    int                                                                 \
+    ip_stack_push_##ty(struct ip_stack_##ty * stack, ty v)              \
+    {                                                                   \
+      if (stack->sp < stack->size) {                                    \
+        stack->data[stack->sp++] = v;                                   \
+        return 0;                                                       \
+      } else {                                                          \
+        return 1;                                                       \
+      }                                                                 \
+    }                                                                   \
+                                                                        \
+    int                                                                 \
+    ip_stack_pop_##ty(struct ip_stack_##ty * stack, ty * v)             \
+    {                                                                   \
+      if (0 < stack->sp) {                                              \
+        *v = stack->data[--stack->sp];                                  \
+        return 0;                                                       \
+      } else {                                                          \
+        return 1;                                                       \
+      }                                                                 \
+    }                                                                   \
 
-int
-ip_empty_stack_init(struct ip_empty_stack *stack, size_t size)
-{
-  stack->data = malloc(size * sizeof(ip_value_t));
-  if (NULL == stack->data) {
-    return 1;
-  }
-  stack->size = size;
-  stack->sp = 0;
-  return 0;
-}
 
-int
-ip_empty_stack_new(size_t size, struct ip_empty_stack **ret)
-{
-  *ret = malloc(sizeof(struct ip_empty_stack));
-  if(NULL == *ret) {
-    return 1;
-  }
+#define ip_stack(ty)                    ip_stack_##ty##_t
+#define ip_stack_init(ty, stack, size)  ip_stack_init_##ty(stack, size)
+#define ip_stack_new(ty, size, ret)     ip_stack_new_##ty(size, ret)
+#define ip_stack_dtor(ty, stack)        ip_stack_dtor_##ty(stack)
+#define ip_stack_size(ty, stack)        ip_stack_size_##ty(stack)
+#define ip_stack_push(ty, stack, v)     ip_stack_push_##ty(stack, v)
+#define ip_stack_pop(ty, stack, ref)    ip_stack_pop_##ty(stack, ref)
+#define ip_stack_ref(ty, stack, i)      ((stack)->data[i])
 
-  return ip_empty_stack_init(*ret, size);
-}
-
-void
-ip_empty_stack_dtor(struct ip_empty_stack *stack)
-{
-  free(stack->data);
-}
-
-
-size_t
-ip_empty_stack_size(struct ip_empty_stack * stack)
-{
-  return stack->sp;
-}
-
-
-int
-ip_empty_stack_push(struct ip_empty_stack * stack, ip_value_t v)
-{
-  if (stack->sp < stack->size) {
-    stack->data[stack->sp++] = v;
-    return 0;
-  } else {
-    return 1;
-  }
-}
-
-int
-ip_empty_stack_pop(struct ip_empty_stack * stack, ip_value_t * v)
-{
-  if (0 < stack->sp) {
-    *v = stack->data[--stack->sp];
-    return 0;
-  } else {
-    return 1;
-  }
-}
-
-
-#define ip_empty_stack_ref(stack, i)   ((stack)->data[i])
+def_ip_stack(ip_value_t);
 
 
 struct ip_proc {
@@ -123,13 +134,13 @@ ip_proc_dtor(struct ip_proc *proc)
  *        --+----------+------------+--------------
  */
 struct ip_vm {
-  struct ip_empty_stack stack;
+  ip_stack(ip_value_t) stack;
 };
 
 int
 ip_vm_init(struct ip_vm *vm)
 {
-  return ip_empty_stack_init( &vm->stack, 1024);
+  return ip_stack_init(ip_value_t, &vm->stack, 1024);
 }
 
 int
@@ -152,23 +163,23 @@ ip_vm_exec(struct ip_vm *vm, struct ip_proc *proc)
   size_t fp;
 
   for (size_t i = 0; i < proc->nlocals; i++) {
-    if (ip_empty_stack_push(&vm->stack, IP_INT2VALUE(0))) {
+    if (ip_stack_push(ip_value_t, &vm->stack, IP_INT2VALUE(0))) {
       return 1;
     }
   }
-  fp = ip_empty_stack_size(&vm->stack);
+  fp = ip_stack_size(ip_value_t, &vm->stack);
 
 
-#define LOCAL(i)  ip_empty_stack_ref(&vm->stack, fp - (proc->nargs + proc->nlocals) + i)
-#define POP(ref)  do{if (ip_empty_stack_pop(&vm->stack, ref)) { return 1;}} while(0)
-#define PUSH(v)   do{if (ip_empty_stack_push(&vm->stack, v)) { return 1;}} while(0)
+#define LOCAL(i)  ip_stack_ref(ip_value_t, &vm->stack, fp - (proc->nargs + proc->nlocals) + i)
+#define POP(ref)  do{if (ip_stack_pop(ip_value_t, &vm->stack, ref)) { return 1;}} while(0)
+#define PUSH(v)   do{if (ip_stack_push(ip_value_t, &vm->stack, v)) { return 1;}} while(0)
 
 
   while (1) {
     struct ip_inst inst = proc->insts[ip];
     switch(inst.code) {
     case IP_CODE_CONST: {
-      ip_empty_stack_push(&vm->stack, inst.u.v);
+      ip_stack_push(ip_value_t, &vm->stack, inst.u.v);
       break;
     }
     case IP_CODE_GET_LOCAL: {
@@ -274,13 +285,13 @@ ip_vm_exec(struct ip_vm *vm, struct ip_proc *proc)
 int
 ip_vm_push_arg(struct ip_vm *vm, ip_value_t arg)
 {
-  return ip_empty_stack_push(&vm->stack, arg);
+  return ip_stack_push(ip_value_t, &vm->stack, arg);
 }
 
 int
 ip_vm_get_result(struct ip_vm *vm, ip_value_t * result)
 {
-  return ip_empty_stack_pop(&vm->stack, result);
+  return ip_stack_pop(ip_value_t, &vm->stack, result);
 }
 
 int
