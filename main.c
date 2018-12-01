@@ -173,6 +173,7 @@ main()
   }
 
 
+  /* call fib */
   if (ip_vm_push_arg(vm, IP_INT2VALUE(30))) {
     puts("initialization failed");
     return 1;
@@ -195,9 +196,38 @@ main()
     return 3;
   }
 
+  printf("result of fib: %d\n", IP_VALUE2INT(result));
+  /* end fib */
+
+
+  /* call sum */
+  if (ip_vm_push_arg(vm, IP_INT2VALUE(5000000))) {
+    puts("initialization failed");
+    return 1;
+  }
+
+  if (ip_vm_push_arg(vm, IP_PROCREF2VALUE(sum))) {
+    puts("initialization failed");
+    return 1;
+  }
+
+  ret = ip_vm_exec(vm, entry);
+  if (ret) {
+    puts("vm returned an error");
+    return 2;
+  }
+
+  ret = ip_vm_get_result(vm, &result);
+  if (ret) {
+    puts("getting result failed");
+    return 3;
+  }
+
+  printf("result of sum: %d\n", IP_VALUE2INT(result));
+  /* end sum */
+
   ip_vm_dtor(vm);
 
-  printf("result: %d\n", IP_VALUE2INT(result));
 
   return 0;
 }
