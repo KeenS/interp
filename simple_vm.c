@@ -447,22 +447,75 @@ ip_register_sum(struct ip_vm *vm)
 }
 
 ip_proc_ref_t
-ip_register_entry(struct ip_vm *vm, ip_proc_ref_t callee)
+ip_register_fib(struct ip_vm *vm)
 {
-  size_t nargs = 0;
+
+  /* registering proc first to recursive call */
+
+  struct ip_proc *proc;
+  ip_proc_ref_t fib;
+
+  proc = malloc(sizeof(struct ip_proc));
+  if (NULL == proc) {
+    return -1;
+  }
+
+  fib = ip_vm_register_proc(vm, proc);
+  if (fib < 0) {
+    return fib;
+  }
+
+  /* 0(arg)   - n */
+  size_t nargs = 1;
   size_t nlocals = 0;
   #define n 0
-  #define i 1
-  #define sum 2
   struct ip_inst body[] = {
-                           /*  0 */ IP_INST_CONST(10),
+                           /*  0 */ IP_INST_CONST(1),
+                           /*  1 */ IP_INST_GET_LOCAL(n),
+                           /*  2 */ IP_INST_SUB(),
+                           /*  3 */ IP_INST_JUMP_IF_NEG(5/* else */),
+                           /* then */
+                           /*  4 */ IP_INST_CONST(1),
+                           /*  5 */ IP_INST_RETURN(),
+                           /* else */
+                           /*  6 */ IP_INST_GET_LOCAL(n),
+                           /*  7 */ IP_INST_CONST(1),
+                           /*  8 */ IP_INST_SUB(),
+                           /*  9 */ IP_INST_CALL(fib),
+                           /* 10 */ IP_INST_GET_LOCAL(n),
+                           /* 11 */ IP_INST_CONST(2),
+                           /* 12 */ IP_INST_SUB(),
+                           /* 13 */ IP_INST_CALL(fib),
+                           /* 14 */ IP_INST_ADD(),
+                           /* 15 */ IP_INST_RETURN(),
+  };
+
+  #undef n
+
+  int ret;
+
+  ret = ip_proc_init(proc, nargs, nlocals, 16, body);
+  if (ret) {
+    return -1;
+  }
+
+  return fib;
+
+}
+
+ip_proc_ref_t
+ip_register_entry(struct ip_vm *vm, ip_proc_ref_t callee)
+{
+  size_t nargs = 1;
+  size_t nlocals = 0;
+  #define n 0
+  struct ip_inst body[] = {
+                           /*  0 */ IP_INST_GET_LOCAL(n),
                            /*  1 */ IP_INST_CALL(callee),
                            /*  2 */ IP_INST_EXIT(),
   };
 
   #undef n
-  #undef i
-  #undef sum
 
   int ret;
   struct ip_proc *proc;
@@ -482,7 +535,7 @@ main()
 
   struct ip_vm *vm;
   int ret;
-  ip_proc_ref_t sum, entry;
+  ip_proc_ref_t sum, fib, entry;
   ip_value_t result;
 
   ret = ip_vm_new(&vm);
@@ -497,14 +550,20 @@ main()
     return 1;
   }
 
-  entry = ip_register_entry(vm, sum);
+  fib = ip_register_fib(vm);
+  if (fib < 0) {
+    puts("proc registration failed: fib");
+    return 1;
+  }
+
+  entry = ip_register_entry(vm, fib);
   if (entry < 0) {
     puts("proc registration failed: main");
     return 1;
   }
 
 
-  if (ip_vm_push_arg(vm, IP_INT2VALUE(10))) {
+  if (ip_vm_push_arg(vm, IP_INT2VALUE(39))) {
     puts("initialization failed");
     return 1;
   }
