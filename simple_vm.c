@@ -125,6 +125,16 @@ ip_proc_dtor(struct ip_proc *proc)
 }
 
 
+typedef struct ip_callinfo {
+  size_t ip;
+  size_t fp;
+  struct ip_proc *proc;
+} ip_callinfo_t;
+
+
+def_ip_stack(ip_callinfo_t);
+
+
 /**
  * stack usage
  *               previous sp        fp             sp
@@ -135,12 +145,30 @@ ip_proc_dtor(struct ip_proc *proc)
  */
 struct ip_vm {
   ip_stack(ip_value_t) stack;
+  ip_stack(ip_callinfo_t) callstack;
+  size_t nprocs;
+  struct ip_proc **procs;
 };
 
 int
 ip_vm_init(struct ip_vm *vm)
 {
-  return ip_stack_init(ip_value_t, &vm->stack, 1024);
+  int ret;
+
+  ret = ip_stack_init(ip_value_t, &vm->stack, 1024);
+  if (ret) {
+    return 1;
+  }
+
+  ret = ip_stack_init(ip_callinfo_t, &vm->callstack, 1024);
+  if (ret) {
+    return 1;
+  }
+
+  vm->nprocs = 0;
+  vm->procs = NULL;
+
+  return 0;
 }
 
 int
@@ -156,11 +184,36 @@ ip_vm_new(struct ip_vm **vm)
 }
 
 
+ip_proc_ref_t
+ip_vm_register_proc(struct ip_vm *vm, struct ip_proc *proc)
+{
+  vm->nprocs += 1;
+  vm->procs = realloc(vm->procs, vm->nprocs * sizeof(struct ip_proc *));
+  if (NULL == vm->procs) {
+    return -1;
+  }
+
+  vm->procs[vm->nprocs - 1] = proc;
+
+  return vm->nprocs - 1;
+}
+
+void
+ip_vm_dtor(struct ip_vm *vm)
+{
+
+  ip_stack_dtor(ip_value_t, &vm->stack);
+  ip_stack_dtor(ip_callinfo_t, &vm->callstack);
+}
+
 int
-ip_vm_exec(struct ip_vm *vm, struct ip_proc *proc)
+ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
 {
   size_t ip = 0;
   size_t fp;
+  struct ip_proc  *proc;
+
+  proc = vm->procs[procref];
 
   for (size_t i = 0; i < proc->nlocals; i++) {
     if (ip_stack_push(ip_value_t, &vm->stack, IP_INT2VALUE(0))) {
@@ -257,7 +310,55 @@ ip_vm_exec(struct ip_vm *vm, struct ip_proc *proc)
       }
       break;
     }
+    case IP_CODE_CALL: {
+      int ret;
+      size_t nlocals;
+      ip_callinfo_t ci = {.ip = ip, .fp = fp, .proc = proc};
+
+      ret = ip_stack_push(ip_callinfo_t, &vm->callstack, ci);
+      if (ret) {
+        return 1;
+      }
+
+      proc = vm->procs[inst.u.p];
+
+      nlocals = proc->nlocals;
+      for(size_t i = 0; i < nlocals; i++) {
+        PUSH(IP_INT2VALUE(0));
+      }
+
+      ip = -1;
+      fp = ip_stack_size(ip_value_t, &vm->stack);
+
+
+      break;
+    }
     case IP_CODE_RETURN: {
+      int ret;
+      ip_value_t v;
+      ip_value_t ignore;
+      ip_callinfo_t ci;
+
+      POP(&v);
+
+      for (size_t i = 0; i < proc->nlocals + proc->nargs; i++) {
+        POP(&ignore);
+      }
+
+      PUSH(v);
+
+      ret = ip_stack_pop(ip_callinfo_t, &vm->callstack, &ci);
+      if (ret) {
+        return 1;
+      }
+
+      ip = ci.ip;
+      fp = ci.fp;
+      proc = ci.proc;
+
+      break;
+    }
+    case IP_CODE_EXIT: {
       ip_value_t v;
       ip_value_t ignore;
       POP(&v);
@@ -294,8 +395,8 @@ ip_vm_get_result(struct ip_vm *vm, ip_value_t * result)
   return ip_stack_pop(ip_value_t, &vm->stack, result);
 }
 
-int
-ip_proc_new_sum(struct ip_proc **proc)
+ip_proc_ref_t
+ip_register_sum(struct ip_vm *vm)
 {
   /* 0(arg)   - n */
   /* 1(local) - i */
@@ -333,7 +434,45 @@ ip_proc_new_sum(struct ip_proc **proc)
   #undef i
   #undef sum
 
-  return ip_proc_new(nargs, nlocals, 19, body, proc);
+  int ret;
+  struct ip_proc *proc;
+
+  ret = ip_proc_new(nargs, nlocals, 19, body, &proc);
+  if (ret) {
+    return -1;
+  }
+
+  return ip_vm_register_proc(vm, proc);
+
+}
+
+ip_proc_ref_t
+ip_register_entry(struct ip_vm *vm, ip_proc_ref_t callee)
+{
+  size_t nargs = 0;
+  size_t nlocals = 0;
+  #define n 0
+  #define i 1
+  #define sum 2
+  struct ip_inst body[] = {
+                           /*  0 */ IP_INST_CONST(10),
+                           /*  1 */ IP_INST_CALL(callee),
+                           /*  2 */ IP_INST_EXIT(),
+  };
+
+  #undef n
+  #undef i
+  #undef sum
+
+  int ret;
+  struct ip_proc *proc;
+
+  ret = ip_proc_new(nargs, nlocals, 3, body, &proc);
+  if (ret) {
+    return -1;
+  }
+
+  return ip_vm_register_proc(vm, proc);
 
 }
 
@@ -342,15 +481,9 @@ main()
 {
 
   struct ip_vm *vm;
-  struct ip_proc *proc;
   int ret;
+  ip_proc_ref_t sum, entry;
   ip_value_t result;
-
-  ret = ip_proc_new_sum(&proc);
-  if (ret) {
-    puts("initialization failed");
-    return 1;
-  }
 
   ret = ip_vm_new(&vm);
   if (ret) {
@@ -358,12 +491,25 @@ main()
     return 1;
   }
 
+  sum = ip_register_sum(vm);
+  if (sum < 0) {
+    puts("proc registration failed: sum");
+    return 1;
+  }
+
+  entry = ip_register_entry(vm, sum);
+  if (entry < 0) {
+    puts("proc registration failed: main");
+    return 1;
+  }
+
+
   if (ip_vm_push_arg(vm, IP_INT2VALUE(10))) {
     puts("initialization failed");
     return 1;
   }
 
-  ret = ip_vm_exec(vm, proc);
+  ret = ip_vm_exec(vm, entry);
   if (ret) {
     puts("vm returned an error");
     return 2;
@@ -374,6 +520,8 @@ main()
     puts("getting result failed");
     return 3;
   }
+
+  ip_vm_dtor(vm);
 
   printf("result: %d\n", IP_VALUE2INT(result));
 

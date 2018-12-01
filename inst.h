@@ -1,6 +1,7 @@
 #include <stdlib.h>
 
-typedef int ip_value_t;
+typedef int    ip_value_t;
+typedef int    ip_proc_ref_t;
 
 #define IP_VALUE2INT(v) (v)
 #define IP_INT2VALUE(i) (i)
@@ -14,13 +15,15 @@ enum ip_code {
               IP_CODE_JUMP,
               IP_CODE_JUMP_IF_ZERO,
               IP_CODE_JUMP_IF_NEG,
+              IP_CODE_CALL,
               IP_CODE_RETURN,
+              IP_CODE_EXIT,
 };
 
 
 struct ip_inst {
   enum ip_code code;
-  union { ip_value_t v; int i; size_t pos;} u;
+  union { ip_value_t v; int i; size_t pos; ip_proc_ref_t p;} u;
 };
 
 
@@ -32,4 +35,6 @@ struct ip_inst {
 #define IP_INST_JUMP(pos)         {IP_CODE_JUMP,         {pos}}
 #define IP_INST_JUMP_IF_ZERO(pos) {IP_CODE_JUMP_IF_ZERO, {pos}}
 #define IP_INST_JUMP_IF_NEG(pos)  {IP_CODE_JUMP_IF_NEG,  {pos}}
+#define IP_INST_CALL(p)           {IP_CODE_CALL,         {p}}
 #define IP_INST_RETURN()          {IP_CODE_RETURN,       {}}
+#define IP_INST_EXIT()            {IP_CODE_EXIT,         {}}
