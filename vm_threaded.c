@@ -160,6 +160,22 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
   size_t ip = 0;
   size_t fp;
   struct ip_proc  *proc;
+  struct ip_inst inst;
+  static void *labels[] = {
+                         &&L_CONST,
+                         &&L_GET_LOCAL,
+                         &&L_SET_LOCAL,
+                         &&L_ADD,
+                         &&L_SUB,
+                         &&L_JUMP,
+                         &&L_JUMP_IF_ZERO,
+                         &&L_JUMP_IF_NEG,
+                         &&L_CALL,
+                         &&L_CALL_INDIRECT,
+                         &&L_RETURN,
+                         &&L_EXIT,
+  };
+
 
 #define LOCAL(i)      ip_stack_ref(ip_value_t, &vm->stack, fp - (proc->nargs + proc->nlocals) + i)
 #define POP(ref)      do{if (ip_stack_pop(ip_value_t, &vm->stack, ref)) { return 1;}} while(0)
@@ -173,14 +189,16 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
   fp = ip_stack_size(ip_value_t, &vm->stack);
 
 
-  while (1) {
-    struct ip_inst inst = proc->insts[ip];
-    switch(inst.code) {
-    case IP_CODE_CONST: {
+#define JUMP()  do{inst = proc->insts[++ip]; goto *labels[inst.code];} while(0);
+
+  inst = proc->insts[ip];
+  goto *labels[inst.code];
+
+ L_CONST: {
       ip_stack_push(ip_value_t, &vm->stack, inst.u.v);
-      break;
+      JUMP();
     }
-    case IP_CODE_GET_LOCAL: {
+ L_GET_LOCAL: {
       int i;
       ip_value_t v;
 
@@ -188,9 +206,9 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
       v = LOCAL(i);
 
       PUSH(v);
-      break;
+      JUMP();
     }
-    case IP_CODE_SET_LOCAL: {
+ L_SET_LOCAL: {
       int i;
       ip_value_t v;
 
@@ -199,9 +217,9 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
 
       LOCAL(i) = v;
 
-      break;
+      JUMP();
     }
-    case IP_CODE_ADD: {
+ L_ADD: {
       ip_value_t v1, v2, ret;
       long long int x, y;
 
@@ -214,9 +232,9 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
 
       PUSH(ret);
 
-      break;
+      JUMP();
     }
-    case IP_CODE_SUB: {
+ L_SUB: {
       ip_value_t v1, v2, ret;
       long long int x, y;
 
@@ -229,13 +247,13 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
 
       PUSH(ret);
 
-      break;
+      JUMP();
     }
-    case IP_CODE_JUMP: {
+ L_JUMP: {
       ip = inst.u.pos;
-      break;
+      JUMP();
     }
-    case IP_CODE_JUMP_IF_ZERO: {
+ L_JUMP_IF_ZERO: {
       ip_value_t v;
 
       POP(&v);
@@ -243,9 +261,9 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
       if (!IP_VALUE2LLINT(v)) {
         ip = inst.u.pos;
       }
-      break;
+      JUMP();
     }
-    case IP_CODE_JUMP_IF_NEG: {
+ L_JUMP_IF_NEG: {
       ip_value_t v;
 
       POP(&v);
@@ -253,9 +271,9 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
       if (IP_VALUE2LLINT(v) < 0) {
         ip = inst.u.pos;
       }
-      break;
+      JUMP();
     }
-    case IP_CODE_CALL: {
+ L_CALL: {
       int ret;
       ip_callinfo_t ci = {.ip = ip, .fp = fp, .proc = proc};
 
@@ -272,9 +290,9 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
       fp = ip_stack_size(ip_value_t, &vm->stack);
 
 
-      break;
+      JUMP();
     }
-    case IP_CODE_CALL_INDIRECT: {
+ L_CALL_INDIRECT: {
       int ret;
       ip_value_t p;
       ip_callinfo_t ci = {.ip = ip, .fp = fp, .proc = proc};
@@ -294,9 +312,9 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
       fp = ip_stack_size(ip_value_t, &vm->stack);
 
 
-      break;
+      JUMP();
     }
-    case IP_CODE_RETURN: {
+ L_RETURN: {
       int ret;
       ip_value_t v;
       ip_value_t ignore;
@@ -317,9 +335,9 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
       fp = ci.fp;
       proc = ci.proc;
 
-      break;
+      JUMP();
     }
-    case IP_CODE_EXIT: {
+ L_EXIT: {
       ip_value_t v;
       ip_value_t ignore;
       POP(&v);
@@ -330,13 +348,6 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
 
       return 0;
     }
-    default: {
-      printf("code: %d, u: %d", inst.code, inst.u.i);
-      return 1;
-    }
-    }
-    ip += 1;
-  }
 
 #undef POP
 #undef PUSH
