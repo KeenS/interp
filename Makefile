@@ -1,20 +1,29 @@
 CFLAGS = -std=c89 -ggdb -O3
 LDFLAGS =
-OBJS = main.o vm.o
+OBJS =
 
 default: all
 
-.PHONY: all run default test clean
+.PHONY: simple threaded run default test clean
 
-all: main
+all: main_simple main_threaded
 
-run: main
-	./main
+simple: main_simple
+	./main_simple
 
-main: $(OBJS)
-	$(CC) -o $@ $(CFLAGS) $(LDFLAGS) $(OBJS)
+threaded: main_threaded
+	./main_threaded
 
-vm.o: vm.c vm.h stack.h
+run: main_simple
+	./main_simple
+
+main_simple: main.o vm_simple.o
+	$(CC) -o $@ $(CFLAGS) $(LDFLAGS) main.o vm_simple.o
+
+main_threaded: main.o vm_threaded.o
+	$(CC) -o $@ $(CFLAGS) $(LDFLAGS) main.o vm_threaded.o
+
+vm_%.o: vm_%.c vm.h stack.h
 	$(CC) -o $@ $(CFLAGS) -c $<
 
 main.o: main.c vm.h
@@ -23,4 +32,5 @@ main.o: main.c vm.h
 vm.h: stack.h
 
 clean:
-	rm *.o
+	rm -f *.o
+	rm -f main_simple
