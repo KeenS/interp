@@ -174,7 +174,7 @@ main()
 
 
   /* call fib */
-  if (ip_vm_push_arg(vm, IP_INT2VALUE(33))) {
+  if (ip_vm_push_arg(vm, IP_INT2VALUE(36))) {
     puts("initialization failed");
     return 1;
   }
@@ -201,7 +201,7 @@ main()
 
 
   /* call sum */
-  if (ip_vm_push_arg(vm, IP_INT2VALUE(10000000))) {
+  if (ip_vm_push_arg(vm, IP_INT2VALUE(100000000))) {
     puts("initialization failed");
     return 1;
   }
