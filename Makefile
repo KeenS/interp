@@ -1,4 +1,4 @@
-CFLAGS = -std=c89 -ggdb
+CFLAGS = -std=c89 -ggdb -O3
 LDFLAGS =
 OBJS = main.o vm.o
 
