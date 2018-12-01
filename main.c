@@ -223,7 +223,7 @@ main()
     return 3;
   }
 
-  printf("result of sum: %d\n", IP_VALUE2INT(result));
+  printf("result of sum: %lld\n", IP_VALUE2LLINT(result));
   /* end sum */
 
   ip_vm_dtor(vm);

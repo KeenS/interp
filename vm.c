@@ -169,7 +169,7 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
 
   proc = vm->procs[procref];
 
-  PUSHN(proc->nlocals, IP_INT2VALUE(0));
+  PUSHN(proc->nlocals, IP_LLINT2VALUE(0));
   fp = ip_stack_size(ip_value_t, &vm->stack);
 
 
@@ -203,12 +203,12 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
     }
     case IP_CODE_ADD: {
       ip_value_t v1, v2, ret;
-      int x, y;
+      long long int x, y;
 
       POP(&v1);
       POP(&v2);
-      y = IP_VALUE2INT(v1);
-      x = IP_VALUE2INT(v2);
+      y = IP_VALUE2LLINT(v1);
+      x = IP_VALUE2LLINT(v2);
 
       ret = IP_INT2VALUE(x + y);
 
@@ -218,14 +218,14 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
     }
     case IP_CODE_SUB: {
       ip_value_t v1, v2, ret;
-      int x, y;
+      long long int x, y;
 
       POP(&v1);
       POP(&v2);
-      y = IP_VALUE2INT(v1);
-      x = IP_VALUE2INT(v2);
+      y = IP_VALUE2LLINT(v1);
+      x = IP_VALUE2LLINT(v2);
 
-      ret = IP_INT2VALUE(x - y);
+      ret = IP_LLINT2VALUE(x - y);
 
       PUSH(ret);
 
@@ -240,7 +240,7 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
 
       POP(&v);
 
-      if (!IP_VALUE2INT(v)) {
+      if (!IP_VALUE2LLINT(v)) {
         ip = inst.u.pos;
       }
       break;
@@ -250,7 +250,7 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
 
       POP(&v);
 
-      if (IP_VALUE2INT(v) < 0) {
+      if (IP_VALUE2LLINT(v) < 0) {
         ip = inst.u.pos;
       }
       break;
@@ -266,7 +266,7 @@ ip_vm_exec(struct ip_vm *vm, ip_proc_ref_t procref)
 
       proc = vm->procs[inst.u.p];
 
-      PUSHN(proc->nlocals, IP_INT2VALUE(0));
+      PUSHN(proc->nlocals, IP_LLINT2VALUE(0));
 
       ip = -1;
       fp = ip_stack_size(ip_value_t, &vm->stack);

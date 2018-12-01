@@ -3,13 +3,15 @@
 
 #include <stdlib.h>
 
-typedef int    ip_value_t;
-typedef int    ip_proc_ref_t;
+typedef long long int  ip_value_t;
+typedef int            ip_proc_ref_t;
 
-#define IP_VALUE2INT(v) (v)
-#define IP_INT2VALUE(i) (i)
-#define IP_VALUE2PROCREF(v) (v)
-#define IP_PROCREF2VALUE(p) (p)
+#define IP_VALUE2INT(v) ((int)v)
+#define IP_INT2VALUE(i) ((ip_value_t)i)
+#define IP_VALUE2LLINT(v) ((long long int)v)
+#define IP_LLINT2VALUE(i) ((ip_value_t)i)
+#define IP_VALUE2PROCREF(v) ((ip_proc_ref_t)v)
+#define IP_PROCREF2VALUE(p) ((ip_value_t)p)
 
 enum ip_code {
               IP_CODE_CONST,
