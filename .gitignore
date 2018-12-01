@@ -2,3 +2,4 @@
 main_simple
 main_threaded
 main_direct_threaded
+main_simple_jit
