@@ -309,7 +309,6 @@ ip_vm_main(enum ip_vm_mode mode, union ip_vm_arg vm_arg)
 
  L_CONST: {
       ip_stack_push(ip_value_t, &vm->stack, arg.u.v);
-      arg = proc->args[++ip];
       NEXT();
     }
  L_CONST_END:
